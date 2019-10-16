@@ -1,4 +1,5 @@
 import AudioContext from './AudioContext';
+import { createAudioMeter } from './VolumeMeter';
 
 let analyser;
 let audioCtx;
@@ -76,11 +77,11 @@ export class MicrophoneRecorder {
 
             audioCtx = AudioContext.getAudioContext();
             audioCtx.resume().then(() => {
-
               analyser = AudioContext.getAnalyser();
               mediaRecorder.start(10);
               const sourceNode = audioCtx.createMediaStreamSource(stream);
-              sourceNode.connect(analyser);
+              const audioMeter = createAudioMeter(audioCtx);
+              sourceNode.connect(audioMeter);
             });
 
           });
