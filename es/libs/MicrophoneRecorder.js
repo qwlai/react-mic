@@ -77,7 +77,7 @@ export var MicrophoneRecorder = function () {
             audioCtx = AudioContext.getAudioContext();
             audioCtx.resume().then(function () {
               analyser = AudioContext.getAnalyser();
-              mediaRecorder.start(10);
+              //mediaRecorder.start(10);
               var sourceNode = audioCtx.createMediaStreamSource(stream);
               var audioMeter = createAudioMeter(audioCtx);
               sourceNode.connect(audioMeter);
