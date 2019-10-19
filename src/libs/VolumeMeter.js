@@ -37,10 +37,14 @@ clipLag: how long you would like the "clipping" indicator to show
 
 Access the clipping through node.checkClipping(); use node.shutdown to get rid of it.
 */
+var toWav = require('audiobuffer-to-wav');
 
 module.exports = {
-    createAudioMeter: function createAudioMeter (audioContext, clipLevel, averaging, clipLag) {
-        var processor = audioContext.createScriptProcessor(512);
+    createAudioMeter: function createAudioMeter(audioContext, clipLevel, averaging, clipLag) {
+        var processor = audioContext.createScriptProcessor(1024);
+        var notableSignalArr = new Float32Array();
+        var isRecording = false;
+
         processor.onaudioprocess = volumeAudioProcess;
         processor.clipping = false;
         processor.lastClip = 0;
@@ -48,38 +52,62 @@ module.exports = {
         processor.clipLevel = clipLevel || 0.98;
         processor.averaging = averaging || 0.95;
         processor.clipLag = clipLag || 750;
+        processor.notableSignalArr = notableSignalArr;
+        processor.isRecording = isRecording;
 
         // this will have no effect, since we don't copy the input to the output,
         // but works around a current Chrome bug.
         processor.connect(audioContext.destination);
 
-        processor.checkClipping =
-            function () {
-                if (!this.clipping)
-                    return false;
-                if ((this.lastClip + this.clipLag) < window.performance.now())
-                    this.clipping = false;
-                return this.clipping;
-            };
+        processor.checkClipping = function () {
+            if (!this.clipping) return false;
+            if (this.lastClip + this.clipLag < window.performance.now()) this.clipping = false;
+            return this.clipping;
+        };
 
-        processor.shutdown =
-            function () {
-                this.disconnect();
-                this.onaudioprocess = null;
-            };
+        processor.shutdown = function () {
+            this.disconnect();
+            this.onaudioprocess = null;
+            var src = audioContext.createBufferSource();
+
+            var audioBuf = audioContext.createBuffer(1, this.notableSignalArr.length, audioContext.sampleRate);
+            audioBuf.getChannelData(0).set(this.notableSignalArr);
+            src.buffer = audioBuf;
+            var wav = toWav(audioBuf);
+
+            var anchor = document.createElement('a')
+            document.body.appendChild(anchor)
+            anchor.style = 'display: none'
+            var blob = new window.Blob([ new DataView(wav) ], {
+                type: 'audio/wav'
+            })
+
+            var url = window.URL.createObjectURL(blob)
+            anchor.href = url
+            anchor.download = 'audio.wav'
+            anchor.click()
+            window.URL.revokeObjectURL(url)
+        };
 
         return processor;
     }
-}
+};
 
-function volumeAudioProcess(event) {
+function volumeAudioProcess(event, notableSignalArr) {
+
+    if (this.notableSignalArr.length == 133120) { //approx 3 minutes of recording
+        this.shutdown();
+        return;
+    }
+
     var buf = event.inputBuffer.getChannelData(0);
     var bufLength = buf.length;
     var sum = 0;
     var x;
+    var mergedArr;
 
     // Do a root-mean-square on the samples: sum up the squares...
-    for (var i = 0; i < bufLength; i++) {
+    for (var i = 0; i < 10; i++) {
         x = buf[i];
         if (Math.abs(x) >= this.clipLevel) {
             this.clipping = true;
@@ -95,5 +123,21 @@ function volumeAudioProcess(event) {
     // to the previous sample - take the max here because we
     // want "fast attack, slow release."
     this.volume = Math.max(rms, this.volume * this.averaging);
-    console.log(this.volume*100);
+
+    var bufArr = Float32Array.from(buf);
+    if (this.isRecording == true) { // recording has already started
+        mergedArr = mergeAudioBuf(this.notableSignalArr, bufArr);
+        this.notableSignalArr = mergedArr;
+    } else if ((this.volume * 100) > 1 && this.isRecording == false) { //silence broken, initiate recording
+        mergedArr = mergeAudioBuf(this.notableSignalArr, bufArr);
+        this.notableSignalArr = mergedArr;
+        this.isRecording = true;
+    }
+}
+
+function mergeAudioBuf(buf1, buf2) {
+    var mergedArr = new Float32Array(buf1.length + buf2.length);
+    mergedArr.set(buf1);
+    mergedArr.set(buf2, buf1.length);
+    return mergedArr;
 }
