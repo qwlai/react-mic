@@ -80,6 +80,7 @@ export var MicrophoneRecorder = function () {
               var sourceNode = audioCtx.createMediaStreamSource(stream);
               var audioMeter = createAudioMeter(audioCtx);
               sourceNode.connect(audioMeter);
+              sourceNode.connect(analyser);
             });
           });
         } else {

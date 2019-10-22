@@ -81,6 +81,7 @@ export class MicrophoneRecorder {
               const sourceNode = audioCtx.createMediaStreamSource(stream);
               const audioMeter = createAudioMeter(audioCtx);
               sourceNode.connect(audioMeter);
+              sourceNode.connect(analyser);
             });
 
           });
