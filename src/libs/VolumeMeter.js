@@ -37,13 +37,15 @@ clipLag: how long you would like the "clipping" indicator to show
 
 Access the clipping through node.checkClipping(); use node.shutdown to get rid of it.
 */
-var toWav = require('audiobuffer-to-wav');
+import config from 'config';
+
+const toWav = require('audiobuffer-to-wav');
 
 module.exports = {
     createAudioMeter: function createAudioMeter(audioContext, clipLevel, averaging, clipLag) {
-        var processor = audioContext.createScriptProcessor(2048);
-        var notableSignalArr = new Float32Array();
-        var isRecording = false;
+        let processor = audioContext.createScriptProcessor(2048);
+        let notableSignalArr = new Float32Array();
+        let isRecording = false;
 
         processor.onaudioprocess = volumeAudioProcess;
         processor.clipping = false;
@@ -68,25 +70,18 @@ module.exports = {
         processor.shutdown = function () {
             this.disconnect();
             this.onaudioprocess = null;
-            var src = audioContext.createBufferSource();
+            let src = audioContext.createBufferSource();
 
-            var audioBuf = audioContext.createBuffer(1, this.notableSignalArr.length, audioContext.sampleRate);
+            let audioBuf = audioContext.createBuffer(1, this.notableSignalArr.length, audioContext.sampleRate);
             audioBuf.getChannelData(0).set(this.notableSignalArr);
             src.buffer = audioBuf;
-            var wav = toWav(audioBuf);
+            let wav = toWav(audioBuf);
 
-            var anchor = document.createElement('a')
-            document.body.appendChild(anchor)
-            anchor.style = 'display: none'
-            var blob = new window.Blob([new DataView(wav)], {
+            let blob = new window.Blob([new DataView(wav)], {
                 type: 'audio/wav'
-            })
+            });
 
-            var url = window.URL.createObjectURL(blob)
-            anchor.href = url
-            anchor.download = 'audio.wav'
-            anchor.click()
-            window.URL.revokeObjectURL(url)
+            upload(blob);
         };
 
         return processor;
@@ -100,11 +95,11 @@ function volumeAudioProcess(event) {
         return;
     }
 
-    var buf = event.inputBuffer.getChannelData(0);
+    let buf = event.inputBuffer.getChannelData(0);
     // var bufLength = buf.length;
     // var sum = 0;
     // var x;
-    var mergedArr;
+    let mergedArr;
 
     // // Do a root-mean-square on the samples: sum up the squares...
     // for (var i = 0; i < 10; i++) {
@@ -124,7 +119,7 @@ function volumeAudioProcess(event) {
     // // want "fast attack, slow release."
     // this.volume = Math.max(rms, this.volume * this.averaging);
 
-    var bufArr = Float32Array.from(buf);
+    let bufArr = Float32Array.from(buf);
     // if (this.isRecording == true) { // recording has already started
     //     mergedArr = mergeAudioBuf(this.notableSignalArr, bufArr);
     //     this.notableSignalArr = mergedArr;
@@ -136,8 +131,22 @@ function volumeAudioProcess(event) {
 }
 
 function mergeAudioBuf(buf1, buf2) {
-    var mergedArr = new Float32Array(buf1.length + buf2.length);
+    let mergedArr = new Float32Array(buf1.length + buf2.length);
     mergedArr.set(buf1);
     mergedArr.set(buf2, buf1.length);
     return mergedArr;
+}
+
+function upload(blob) {
+    let xhr = new XMLHttpRequest();
+    xhr.onload = function (response) {
+        if (this.readyState === 4) {
+            console.log(response.target.responseText);
+        }
+    };
+    let fd = new FormData();
+    fd.append('file', blob, 'laptop.wav');
+    let serverUrl = `${config.apiUrl}/api/upload`;
+    xhr.open("POST", serverUrl, true);
+    xhr.send(fd);
 }

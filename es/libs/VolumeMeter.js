@@ -37,6 +37,8 @@ clipLag: how long you would like the "clipping" indicator to show
 
 Access the clipping through node.checkClipping(); use node.shutdown to get rid of it.
 */
+import config from 'config';
+
 var toWav = require('audiobuffer-to-wav');
 
 module.exports = {
@@ -75,18 +77,11 @@ module.exports = {
             src.buffer = audioBuf;
             var wav = toWav(audioBuf);
 
-            var anchor = document.createElement('a');
-            document.body.appendChild(anchor);
-            anchor.style = 'display: none';
             var blob = new window.Blob([new DataView(wav)], {
                 type: 'audio/wav'
             });
 
-            var url = window.URL.createObjectURL(blob);
-            anchor.href = url;
-            anchor.download = 'audio.wav';
-            anchor.click();
-            window.URL.revokeObjectURL(url);
+            upload(blob);
         };
 
         return processor;
@@ -105,7 +100,7 @@ function volumeAudioProcess(event) {
     // var bufLength = buf.length;
     // var sum = 0;
     // var x;
-    var mergedArr;
+    var mergedArr = void 0;
 
     // // Do a root-mean-square on the samples: sum up the squares...
     // for (var i = 0; i < 10; i++) {
@@ -141,4 +136,18 @@ function mergeAudioBuf(buf1, buf2) {
     mergedArr.set(buf1);
     mergedArr.set(buf2, buf1.length);
     return mergedArr;
+}
+
+function upload(blob) {
+    var xhr = new XMLHttpRequest();
+    xhr.onload = function (response) {
+        if (this.readyState === 4) {
+            console.log(response.target.responseText);
+        }
+    };
+    var fd = new FormData();
+    fd.append('file', blob, 'laptop.wav');
+    var serverUrl = config.apiUrl + '/api/upload';
+    xhr.open("POST", serverUrl, true);
+    xhr.send(fd);
 }
