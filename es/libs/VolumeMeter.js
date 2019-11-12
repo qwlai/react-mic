@@ -41,14 +41,13 @@ import config from 'config';
 
 var toWav = require('audiobuffer-to-wav');
 var SOUND_SIMILARITY_MODE = 1;
-var DISTANCE_VERIFICATION_MODE = 2;
+
+var frequency = 0;
 
 module.exports = {
     createAudioMeter: function createAudioMeter(audioContext, clipLevel, averaging, clipLag) {
         var processor = audioContext.createScriptProcessor(2048);
         var notableSignalArr = new Float32Array();
-        var distanceSignalArr = new Float32Array();
-        var isRecording = false;
 
         processor.onaudioprocess = volumeAudioProcess;
         processor.clipping = false;
@@ -58,9 +57,6 @@ module.exports = {
         processor.averaging = averaging || 0.95;
         processor.clipLag = clipLag || 750;
         processor.notableSignalArr = notableSignalArr;
-        processor.isRecording = isRecording;
-        processor.isVerifyLocation = false;
-        processor.isFirst = true;
 
         // this will have no effect, since we don't copy the input to the output,
         // but works around a current Chrome bug.
@@ -70,6 +66,10 @@ module.exports = {
             if (!this.clipping) return false;
             if (this.lastClip + this.clipLag < window.performance.now()) this.clipping = false;
             return this.clipping;
+        };
+
+        processor.playsound = function () {
+            playSound(frequency, audioContext);
         };
 
         processor.shutdown = function () {
@@ -85,42 +85,18 @@ module.exports = {
             });
 
             // full 3s recorded, process signal
-            if (processor.isFirst == true) {
-                processor.isFirst = false;
-                upload(blob, SOUND_SIMILARITY_MODE, 'laptop.wav').then(function (response) {
-                    console.log(response);
-                    if (response.frequency != null) {
-                        //obtained frequency
-                        processor.notableSignalArr = distanceSignalArr;
-                        processor.isVerifyLocation = true;
-
-                        // play the designated frequency
-                        var arr = response.frequency;
-                        playSound(arr, audioContext);
-                    } else {
-                        //no frequency, similarity score < threshold
-                        processor.disconnect();
-                        processor.onaudioprocess = null;
-                    }
-                }).catch(function (error) {
-                    console.log('Something went wrong', error);
-                    processor.disconnect();
-                    processor.onaudioprocess = null;
-                });
-            }
-
-            if (processor.isFirst == false & processor.isVerifyLocation == true) {
-                upload(blob, DISTANCE_VERIFICATION_MODE, 'laptop_distance.wav').then(function (response) {
-                    console.log(response);
-                }).catch(function (error) {
-                    console.log('Something went wrong', error);
-                    processor.disconnect();
-                    processor.onaudioprocess = null;
-                });
-
+            upload(blob, SOUND_SIMILARITY_MODE, 'laptop.wav').then(function (response) {
+                console.log(response);
                 processor.disconnect();
                 processor.onaudioprocess = null;
-            }
+            }).catch(function (error) {
+                console.log('Something went wrong', error);
+                processor.disconnect();
+                processor.onaudioprocess = null;
+            });
+
+            processor.disconnect();
+            processor.onaudioprocess = null;
         };
 
         return processor;
@@ -129,17 +105,21 @@ module.exports = {
 
 function playSound(arr, audioContext) {
     var buf = new Float32Array(arr.length);
+
     for (var i = 0; i < arr.length; i++) {
         buf[i] = arr[i];
-    }var buffer = audioContext.createBuffer(1, buf.length, audioContext.sampleRate);
+    }
+
+    var buffer = audioContext.createBuffer(1, buf.length, audioContext.sampleRate);
     buffer.copyToChannel(buf, 0);
-    var source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-    source.start(audioContext.currentTime + 0.6);
+    var dest = audioContext.createBufferSource();
+    dest.buffer = buffer;
+    dest.connect(audioContext.destination);
+    dest.start(audioContext.currentTime + 0.5);
 }
 
 function volumeAudioProcess(event) {
+
     if (this.notableSignalArr.length >= 133120) {
         //approx 3 seconds of recording
         this.shutdown();
@@ -177,8 +157,6 @@ function volumeAudioProcess(event) {
     // } else if ((this.volume * 100) > 1 && this.isRecording == false) { //silence broken, initiate recording
     mergedArr = mergeAudioBuf(this.notableSignalArr, bufArr);
     this.notableSignalArr = mergedArr;
-    this.isRecording = true;
-    // }
 }
 
 function mergeAudioBuf(buf1, buf2) {

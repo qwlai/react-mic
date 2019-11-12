@@ -39,16 +39,15 @@ Access the clipping through node.checkClipping(); use node.shutdown to get rid o
 */
 import config from 'config';
 
-let toWav = require('audiobuffer-to-wav');
-const SOUND_SIMILARITY_MODE = 1;
-const DISTANCE_VERIFICATION_MODE = 2;
+var toWav = require('audiobuffer-to-wav');
+var SOUND_SIMILARITY_MODE = 1;
+
+var frequency = 0
 
 module.exports = {
     createAudioMeter: function createAudioMeter(audioContext, clipLevel, averaging, clipLag) {
-        let processor = audioContext.createScriptProcessor(2048);
-        let notableSignalArr = new Float32Array();
-        let distanceSignalArr = new Float32Array();
-        let isRecording = false;
+        var processor = audioContext.createScriptProcessor(2048);
+        var notableSignalArr = new Float32Array();
 
         processor.onaudioprocess = volumeAudioProcess;
         processor.clipping = false;
@@ -58,9 +57,6 @@ module.exports = {
         processor.averaging = averaging || 0.95;
         processor.clipLag = clipLag || 750;
         processor.notableSignalArr = notableSignalArr;
-        processor.isRecording = isRecording;
-        processor.isVerifyLocation = false;
-        processor.isFirst = true;
 
         // this will have no effect, since we don't copy the input to the output,
         // but works around a current Chrome bug.
@@ -72,54 +68,36 @@ module.exports = {
             return this.clipping;
         };
 
-        processor.shutdown = function () {
-            let src = audioContext.createBufferSource();
 
-            let audioBuf = audioContext.createBuffer(1, this.notableSignalArr.length, audioContext.sampleRate);
+        processor.playsound = function () {
+            playSound(frequency, audioContext);
+        }
+
+        processor.shutdown = function () {
+            var src = audioContext.createBufferSource();
+
+            var audioBuf = audioContext.createBuffer(1, this.notableSignalArr.length, audioContext.sampleRate);
             audioBuf.getChannelData(0).set(this.notableSignalArr);
             src.buffer = audioBuf;
-            let wav = toWav(audioBuf);
+            var wav = toWav(audioBuf);
 
-            let blob = new window.Blob([new DataView(wav)], {
+            var blob = new window.Blob([new DataView(wav)], {
                 type: 'audio/wav'
             });
 
             // full 3s recorded, process signal
-            if (processor.isFirst == true) {
-                processor.isFirst = false;
-                upload(blob, SOUND_SIMILARITY_MODE, 'laptop.wav').then(function (response) {
-                    console.log(response);
-                    if (response.frequency != null) { //obtained frequency
-                        processor.notableSignalArr = distanceSignalArr;
-                        processor.isVerifyLocation = true;
-
-                        // play the designated frequency
-                        let arr = response.frequency
-                        playSound(arr, audioContext);
-                    } else { //no frequency, similarity score < threshold
-                        processor.disconnect();
-                        processor.onaudioprocess = null;
-                    }
-                }).catch(function (error) {
-                    console.log('Something went wrong', error);
-                    processor.disconnect();
-                    processor.onaudioprocess = null;
-                });
-            }
-
-            if (processor.isFirst == false & processor.isVerifyLocation == true) {
-                upload(blob, DISTANCE_VERIFICATION_MODE, 'laptop_distance.wav').then(function (response) {
-                    console.log(response)
-                }).catch(function (error) {
-                    console.log('Something went wrong', error);
-                    processor.disconnect();
-                    processor.onaudioprocess = null;
-                });
-
+            upload(blob, SOUND_SIMILARITY_MODE, 'laptop.wav').then(function (response) {
+                console.log(response);
                 processor.disconnect();
                 processor.onaudioprocess = null;
-            }
+            }).catch(function (error) {
+                console.log('Something went wrong', error);
+                processor.disconnect();
+                processor.onaudioprocess = null;
+            });
 
+            processor.disconnect();
+            processor.onaudioprocess = null;
         };
 
         return processor;
@@ -127,28 +105,33 @@ module.exports = {
 };
 
 function playSound(arr, audioContext) {
-    let buf = new Float32Array(arr.length)
-    for (let i = 0; i < arr.length; i++) buf[i] = arr[i]
-    let buffer = audioContext.createBuffer(1, buf.length, audioContext.sampleRate)
-    buffer.copyToChannel(buf, 0)
-    let source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-    source.start(audioContext.currentTime + 0.6);
+    var buf = new Float32Array(arr.length);
+
+    for (var i = 0; i < arr.length; i++) {
+        buf[i] = arr[i];
+    }
+
+    var buffer = audioContext.createBuffer(1, buf.length, audioContext.sampleRate);
+    buffer.copyToChannel(buf, 0);
+    var dest = audioContext.createBufferSource();
+    dest.buffer = buffer;
+    dest.connect(audioContext.destination);
+    dest.start(audioContext.currentTime + 0.5);
 }
 
 function volumeAudioProcess(event) {
+
     if (this.notableSignalArr.length >= 133120) {
         //approx 3 seconds of recording
         this.shutdown();
         return null;
     }
 
-    let buf = event.inputBuffer.getChannelData(0);
+    var buf = event.inputBuffer.getChannelData(0);
     // let bufLength = buf.length;
     // let sum = 0;
     // let x;
-    let mergedArr = void 0;
+    var mergedArr = void 0;
 
     // // Do a root-mean-square on the samples: sum up the squares...
     // for (let i = 0; i < 10; i++) {
@@ -168,26 +151,24 @@ function volumeAudioProcess(event) {
     // // want "fast attack, slow release."
     // this.volume = Math.max(rms, this.volume * this.averaging);
 
-    let bufArr = Float32Array.from(buf);
+    var bufArr = Float32Array.from(buf);
     // if (this.isRecording == true) { // recording has already started
     //     mergedArr = mergeAudioBuf(this.notableSignalArr, bufArr);
     //     this.notableSignalArr = mergedArr;
     // } else if ((this.volume * 100) > 1 && this.isRecording == false) { //silence broken, initiate recording
     mergedArr = mergeAudioBuf(this.notableSignalArr, bufArr);
     this.notableSignalArr = mergedArr;
-    this.isRecording = true;
-    // }
 }
 
 function mergeAudioBuf(buf1, buf2) {
-    let mergedArr = new Float32Array(buf1.length + buf2.length);
+    var mergedArr = new Float32Array(buf1.length + buf2.length);
     mergedArr.set(buf1);
     mergedArr.set(buf2, buf1.length);
     return mergedArr;
 }
 
-let upload = function (blob, mode, filename) {
-    let request = new XMLHttpRequest();
+var upload = function upload(blob, mode, filename) {
+    var request = new XMLHttpRequest();
     return new Promise(function (resolve, reject) {
         // Setup listener to process completed requests
         request.onload = function (response) {
@@ -198,7 +179,7 @@ let upload = function (blob, mode, filename) {
             // Process the response
             if (request.status >= 200 && request.status < 300) {
                 // If successful
-                let jsonResponse = JSON.parse(response.target.responseText);
+                var jsonResponse = JSON.parse(response.target.responseText);
                 resolve(jsonResponse);
             } else {
                 // If failed
@@ -209,10 +190,10 @@ let upload = function (blob, mode, filename) {
             }
         };
 
-        let fd = new FormData();
+        var fd = new FormData();
         fd.append('file', blob, filename);
         fd.append('mode', mode);
-        let serverUrl = config.apiUrl + '/api/upload';
+        var serverUrl = config.apiUrl + '/api/upload';
         request.open("POST", serverUrl, true);
         request.send(fd);
     });
