@@ -40,7 +40,6 @@ Access the clipping through node.checkClipping(); use node.shutdown to get rid o
 import config from 'config';
 
 var toWav = require('audiobuffer-to-wav');
-var SOUND_SIMILARITY_MODE = 1;
 
 module.exports = {
     createAudioMeter: function createAudioMeter(audioContext, clipLevel, averaging, clipLag) {
@@ -85,7 +84,7 @@ module.exports = {
             });
 
             // full 3s recorded, process signal
-            upload(blob, SOUND_SIMILARITY_MODE, 'laptop.wav').then(function (response) {
+            upload(blob,'laptop.wav').then(function (response) {
                 console.log(response);
                 processor.disconnect();
                 processor.onaudioprocess = null;
@@ -172,7 +171,7 @@ function mergeAudioBuf(buf1, buf2) {
     return mergedArr;
 }
 
-var upload = function upload(blob, mode, filename) {
+var upload = function upload(blob, filename) {
     var request = new XMLHttpRequest();
     return new Promise(function (resolve, reject) {
         // Setup listener to process completed requests
@@ -197,7 +196,6 @@ var upload = function upload(blob, mode, filename) {
 
         var fd = new FormData();
         fd.append('file', blob, filename);
-        fd.append('mode', mode);
         var serverUrl = config.apiUrl + '/api/upload';
         request.open("POST", serverUrl, true);
         request.send(fd);
