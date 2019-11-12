@@ -42,8 +42,6 @@ import config from 'config';
 var toWav = require('audiobuffer-to-wav');
 var SOUND_SIMILARITY_MODE = 1;
 
-var frequency = 0;
-
 module.exports = {
     createAudioMeter: function createAudioMeter(audioContext, clipLevel, averaging, clipLag) {
         var processor = audioContext.createScriptProcessor(2048);
@@ -57,6 +55,7 @@ module.exports = {
         processor.averaging = averaging || 0.95;
         processor.clipLag = clipLag || 750;
         processor.notableSignalArr = notableSignalArr;
+        processor.isSoundPlayed = false;
 
         // this will have no effect, since we don't copy the input to the output,
         // but works around a current Chrome bug.
@@ -69,7 +68,8 @@ module.exports = {
         };
 
         processor.playsound = function () {
-            playSound(frequency, audioContext);
+            var freqArr = JSON.parse(localStorage.getItem('frequency'));
+            playSound(freqArr, audioContext);
         };
 
         processor.shutdown = function () {
@@ -115,10 +115,16 @@ function playSound(arr, audioContext) {
     var dest = audioContext.createBufferSource();
     dest.buffer = buffer;
     dest.connect(audioContext.destination);
-    dest.start(audioContext.currentTime + 0.5);
+    dest.start(audioContext.currentTime);
 }
 
 function volumeAudioProcess(event) {
+
+    // Delay 0.5 before playing the frequency sweep
+    if (this.notableSignalArr.length >= 22050 && this.isSoundPlayed == false) {
+        this.playsound();
+        this.isSoundPlayed = true;
+    }
 
     if (this.notableSignalArr.length >= 133120) {
         //approx 3 seconds of recording
